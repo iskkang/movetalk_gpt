@@ -9,12 +9,12 @@
 
 require("dotenv").config();
 
+const axios = require("axios");
 const cors = require("cors");
 const express = require("express");
+const FormData = require("form-data");
 const multer = require("multer");
-const OpenAI = require("openai");
-const { toFile } = require("openai");
-const { Agent } = require("undici");
+const https = require("https");
 const {
   addMessage,
   createSession,
@@ -34,10 +34,9 @@ const upload = multer({
 
 const requestBuckets = new Map();
 const sessionStreams = new Map();
-const ipv4Dispatcher = new Agent({
-  connect: {
-    family: 4,
-  },
+const httpsAgent = new https.Agent({
+  family: 4,
+  keepAlive: true,
 });
 
 function normalizeOrigin(value) {
@@ -165,49 +164,65 @@ function languageCode(code) {
   return code === "ru" ? "ru" : "ko";
 }
 
-function getOpenAI() {
+function getOpenAIKey() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OpenAI API key is missing.");
   }
 
-  return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: 60_000,
-    maxRetries: 1,
-    fetchOptions: {
-      dispatcher: ipv4Dispatcher,
-    },
-  });
+  return process.env.OPENAI_API_KEY;
 }
 
 async function transcribeAudio(buffer, fileName, sourceLang) {
-  const uploadFile = await toFile(buffer, fileName || "audio.webm");
-  const response = await getOpenAI().audio.transcriptions.create({
-    file: uploadFile,
-    model: "whisper-1",
-    language: languageCode(sourceLang),
+  const form = new FormData();
+  form.append("file", buffer, {
+    filename: fileName || "audio.webm",
+    contentType: "audio/webm",
+  });
+  form.append("model", "whisper-1");
+  form.append("language", languageCode(sourceLang));
+
+  const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", form, {
+    headers: {
+      Authorization: `Bearer ${getOpenAIKey()}`,
+      ...form.getHeaders(),
+    },
+    httpsAgent,
+    timeout: 60_000,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
   });
 
-  return response.text;
+  return response.data.text;
 }
 
 async function translateText(text, sourceLang, targetLang) {
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a professional business interpreter specializing in logistics,\nfreight forwarding, customs clearance, shipping schedules, cargo status,\npricing, payments, and trade communication between Korea and Russia.\nTranslate naturally, clearly, and accurately for business use.\nPreserve all numbers, dates, company names, port names, Incoterms,\ncurrencies, and container types exactly as given.\nReturn ONLY the translated text. No explanations, no notes.",
+  const response = await axios.post(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a professional business interpreter specializing in logistics,\nfreight forwarding, customs clearance, shipping schedules, cargo status,\npricing, payments, and trade communication between Korea and Russia.\nTranslate naturally, clearly, and accurately for business use.\nPreserve all numbers, dates, company names, port names, Incoterms,\ncurrencies, and container types exactly as given.\nReturn ONLY the translated text. No explanations, no notes.",
+        },
+        {
+          role: "user",
+          content: `Source language: ${sourceLang}\nTarget language: ${targetLang}\nText: ${text}`,
+        },
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${getOpenAIKey()}`,
+        "Content-Type": "application/json",
       },
-      {
-        role: "user",
-        content: `Source language: ${sourceLang}\nTarget language: ${targetLang}\nText: ${text}`,
-      },
-    ],
-  });
+      httpsAgent,
+      timeout: 60_000,
+    },
+  );
 
-  return response.choices?.[0]?.message?.content?.trim() || "";
+  return response.data.choices?.[0]?.message?.content?.trim() || "";
 }
 
 app.get("/health", (req, res) => {
@@ -327,9 +342,14 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
     });
   } catch (error) {
     logLine([logPrefix, "=>", "FAILED"]);
-    logLine([`sessionId=${sessionId}`, `elapsedMs=${Date.now() - startedAt}`, `reason=${error.message}`]);
+    const reason =
+      error?.response?.data?.error?.message || error?.code || error?.message || "Unknown error";
+    logLine([`sessionId=${sessionId}`, `elapsedMs=${Date.now() - startedAt}`, `reason=${reason}`]);
     if (error?.stack) {
       console.error(error.stack);
+    }
+    if (error?.response?.data) {
+      console.error(JSON.stringify(error.response.data));
     }
     res.status(500).json({
       error: "처리 중 오류가 발생했습니다. 다시 시도해주세요.",
