@@ -204,10 +204,18 @@ export default function SessionScreen({
 
       setMessages((prev) => {
         const next = failedMessageId ? prev.filter((item) => item.id !== failedMessageId) : prev;
+        const messageId = response.id || `${Date.now()}`;
+
+        // SSE stream can append the same message before this HTTP response arrives.
+        // Guard against duplicate cards by id on the success path as well.
+        if (next.some((item) => item.id === messageId)) {
+          return next;
+        }
+
         return [
           ...next,
           {
-            id: response.id || `${Date.now()}`,
+            id: messageId,
             speakerRole: response.speakerRole,
             originalText: response.originalText,
             translatedText: response.translatedText,
