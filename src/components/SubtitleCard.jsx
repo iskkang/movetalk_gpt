@@ -19,9 +19,10 @@ export default function SubtitleCard({
   onRetry,
   readOnly = false,
   labels,
+  speakerLabel,
 }) {
   const isMe = speaker === "me";
-  const label = isMe ? labels?.me || "나" : labels?.other || "상대방";
+  const label = speakerLabel || (isMe ? labels?.me || "나" : labels?.other || "상대방");
 
   return (
     <div

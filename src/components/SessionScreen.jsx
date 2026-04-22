@@ -3,7 +3,12 @@ import SubtitleCard from "./SubtitleCard";
 import Toast from "./Toast";
 import Modal from "./Modal";
 import { checkMicPermission, startRecording, stopRecording } from "../utils/audio";
-import { endSession, transcribeAndTranslate } from "../utils/api";
+import {
+  createSessionStream,
+  endSession,
+  getSessionDetail,
+  transcribeAndTranslate,
+} from "../utils/api";
 import { getCopy } from "../utils/i18n";
 
 function languagePair(sourceLang, targetLang) {
@@ -49,6 +54,7 @@ export default function SessionScreen({
   sessionId,
   sessionTitle,
   uiLang,
+  participantRole,
   onViewHistory,
   onStartNewSession,
 }) {
@@ -66,8 +72,12 @@ export default function SessionScreen({
   const [isSessionEnded, setIsSessionEnded] = useState(false);
   const [summary, setSummary] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [presence, setPresence] = useState({ host: false, guest: false });
   const conversationRef = useRef(null);
   const text = getCopy(uiLang);
+  const isHost = participantRole === "host";
+  const counterpartRole = isHost ? "guest" : "host";
+  const inviteLink = `${window.location.origin}?session=${sessionId}&role=guest`;
 
   const showToast = (message, type = "error") => {
     setToast({ message, type, visible: true });
@@ -85,6 +95,79 @@ export default function SessionScreen({
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadSession = async () => {
+      try {
+        const session = await getSessionDetail(sessionId);
+        if (!active) {
+          return;
+        }
+
+        setMessages(
+          (session.messages || []).map((message) => ({
+            ...message,
+            failed: false,
+          })),
+        );
+        setIsSessionEnded(Boolean(session.endedAt));
+      } catch (error) {
+        if (active) {
+          showToast(error.message || text.enterSessionError);
+        }
+      }
+    };
+
+    loadSession();
+
+    return () => {
+      active = false;
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    const stream = createSessionStream(sessionId, participantRole);
+
+    stream.addEventListener("snapshot", (event) => {
+      const payload = JSON.parse(event.data);
+      setMessages(
+        (payload.messages || []).map((message) => ({
+          ...message,
+          failed: false,
+        })),
+      );
+    });
+
+    stream.addEventListener("message", (event) => {
+      const payload = JSON.parse(event.data);
+      setMessages((prev) => {
+        if (prev.some((item) => item.id === payload.id)) {
+          return prev;
+        }
+
+        return [...prev, { ...payload, failed: false }];
+      });
+    });
+
+    stream.addEventListener("presence", (event) => {
+      const payload = JSON.parse(event.data);
+      setPresence(payload);
+    });
+
+    stream.addEventListener("sessionEnded", () => {
+      setIsSessionEnded(true);
+    });
+
+    stream.onerror = () => {
+      stream.close();
+    };
+
+    return () => {
+      stream.close();
+    };
+  }, [participantRole, sessionId]);
 
   useEffect(() => {
     if (!conversationRef.current) {
@@ -205,14 +288,13 @@ export default function SessionScreen({
 
     try {
       const audioBlob = await stopRecording(instance);
-      const direction =
-        speakerRole === "me"
-          ? { source: sourceLang, target: targetLang }
-          : { source: targetLang, target: sourceLang };
+      const direction = isHost
+        ? { source: sourceLang, target: targetLang }
+        : { source: targetLang, target: sourceLang };
 
       await submitAudio({
         audioBlob,
-        speakerRole,
+        speakerRole: participantRole,
         currentSourceLang: direction.source,
         currentTargetLang: direction.target,
       });
@@ -271,6 +353,8 @@ export default function SessionScreen({
   const canRecord =
     !isOffline && !isProcessing && !isSessionEnded && !recorderState.instance;
 
+  const liveStatus = presence[counterpartRole] ? text.participantConnected : text.participantWaiting;
+
   return (
     <section style={screenStyle}>
       <Toast {...toast} onHide={() => setToast((prev) => ({ ...prev, visible: false }))} />
@@ -288,6 +372,9 @@ export default function SessionScreen({
             <div style={{ color: "#1d4ed8", fontWeight: 700, marginTop: 6 }}>
               {languagePair(sourceLang, targetLang)}
             </div>
+            <div style={{ color: "#64748b", fontSize: 13, marginTop: 6 }}>
+              {isHost ? text.roleHost : text.roleGuest} · {liveStatus}
+            </div>
           </div>
         </div>
 
@@ -298,17 +385,28 @@ export default function SessionScreen({
 
       <div style={conversationHeaderStyle}>
         <div>
-          <strong>{contactName}</strong>
+          <strong>{isHost ? contactName : text.liveConnected}</strong>
           <div style={{ color: "#64748b", fontSize: 13 }}>{text.liveTranscript}</div>
         </div>
-        <button
-          style={clearButtonStyle}
-          onClick={() => setMessages([])}
-          disabled={messages.length === 0}
-        >
-          {text.clearSubtitles}
-        </button>
+        {isHost ? (
+          <button style={clearButtonStyle} onClick={async () => {
+            await navigator.clipboard.writeText(inviteLink);
+            showToast(text.copyInviteSuccess, "success");
+          }}>
+            {text.copyInviteLink}
+          </button>
+        ) : (
+          <span style={presenceBadgeStyle(presence.host)}>{text.liveConnected}</span>
+        )}
       </div>
+
+      {isHost && (
+        <div style={inviteCardStyle}>
+          <strong style={{ display: "block", marginBottom: 8 }}>{text.inviteGuest}</strong>
+          <div style={{ color: "#475569", fontSize: 14, marginBottom: 12 }}>{text.waitingGuest}</div>
+          <div style={linkBoxStyle}>{inviteLink}</div>
+        </div>
+      )}
 
       <div ref={conversationRef} style={conversationStyle}>
         {messages.length === 0 ? (
@@ -317,58 +415,41 @@ export default function SessionScreen({
           messages.map((message) => (
             <SubtitleCard
               key={message.id}
-              speaker={message.speakerRole}
+              speaker={message.speakerRole === participantRole ? "me" : "other"}
               timestamp={message.timestamp}
               originalText={message.originalText}
               translatedText={message.translatedText}
               failed={message.failed}
               readOnly={isSessionEnded}
               labels={text}
+              speakerLabel={message.speakerRole === participantRole ? text.me : text.other}
               onRetry={() => handleRetry(message)}
             />
           ))
         )}
       </div>
 
-      <div style={controlsStyle}>
+      <div style={singleControlStyle}>
         <button
           style={{
             ...speakerButtonStyle("#2563eb"),
-            ...(activeSpeaker === "me" && recorderState.instance ? recordingStyle : {}),
-          }}
-          disabled={!canRecord && !(recorderState.instance && recorderState.speakerRole === "me")}
-          onMouseDown={() => handlePressStart("me")}
-          onMouseUp={handlePressEnd}
-          onMouseLeave={() => {
-            if (recorderState.speakerRole === "me") {
-              handlePressEnd();
-            }
-          }}
-          onTouchStart={() => handlePressStart("me")}
-          onTouchEnd={handlePressEnd}
-        >
-          {isProcessing && activeSpeaker === "me" ? makeSpinner() : text.meTalk}
-        </button>
-
-        <button
-          style={{
-            ...speakerButtonStyle("#ea580c"),
-            ...(activeSpeaker === "other" && recorderState.instance ? recordingStyle : {}),
+            ...(activeSpeaker === participantRole && recorderState.instance ? recordingStyle : {}),
           }}
           disabled={
-            !canRecord && !(recorderState.instance && recorderState.speakerRole === "other")
+            !canRecord &&
+            !(recorderState.instance && recorderState.speakerRole === participantRole)
           }
-          onMouseDown={() => handlePressStart("other")}
+          onMouseDown={() => handlePressStart(participantRole)}
           onMouseUp={handlePressEnd}
           onMouseLeave={() => {
-            if (recorderState.speakerRole === "other") {
+            if (recorderState.speakerRole === participantRole) {
               handlePressEnd();
             }
           }}
-          onTouchStart={() => handlePressStart("other")}
+          onTouchStart={() => handlePressStart(participantRole)}
           onTouchEnd={handlePressEnd}
         >
-          {isProcessing && activeSpeaker === "other" ? makeSpinner() : text.otherTalk}
+          {isProcessing && activeSpeaker === participantRole ? makeSpinner() : text.speakNow}
         </button>
       </div>
 
@@ -487,6 +568,36 @@ const controlsStyle = {
   gridTemplateColumns: "1fr 1fr",
   gap: 12,
 };
+
+const singleControlStyle = {
+  display: "grid",
+};
+
+const inviteCardStyle = {
+  background: "#ecfdf5",
+  border: "1px solid #bbf7d0",
+  borderRadius: 18,
+  padding: 14,
+};
+
+const linkBoxStyle = {
+  background: "#fff",
+  borderRadius: 12,
+  border: "1px solid #d1fae5",
+  padding: "10px 12px",
+  color: "#14532d",
+  fontSize: 13,
+  wordBreak: "break-all",
+};
+
+const presenceBadgeStyle = (connected) => ({
+  borderRadius: 999,
+  background: connected ? "#dcfce7" : "#fef3c7",
+  color: connected ? "#166534" : "#92400e",
+  padding: "8px 10px",
+  fontSize: 12,
+  fontWeight: 800,
+});
 
 const speakerButtonStyle = (background) => ({
   minHeight: 72,

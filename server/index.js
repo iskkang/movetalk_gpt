@@ -31,6 +31,7 @@ const upload = multer({
 });
 
 const requestBuckets = new Map();
+const sessionStreams = new Map();
 
 function normalizeOrigin(value) {
   return (value || "").trim().replace(/\/$/, "");
@@ -72,6 +73,40 @@ function isAllowedOrigin(origin) {
 
 function logLine(parts) {
   console.log(`[${new Date().toISOString()}] ${parts.join(" ")}`);
+}
+
+function getSessionStream(sessionId) {
+  if (!sessionStreams.has(sessionId)) {
+    sessionStreams.set(sessionId, {
+      clients: new Set(),
+      presence: {
+        host: false,
+        guest: false,
+      },
+    });
+  }
+
+  return sessionStreams.get(sessionId);
+}
+
+function broadcast(sessionId, event, payload) {
+  const stream = sessionStreams.get(sessionId);
+  if (!stream) {
+    return;
+  }
+
+  const packet = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+  stream.clients.forEach((client) => client.write(packet));
+}
+
+function updatePresence(sessionId, role, connected) {
+  if (role !== "host" && role !== "guest") {
+    return;
+  }
+
+  const stream = getSessionStream(sessionId);
+  stream.presence[role] = connected;
+  broadcast(sessionId, "presence", stream.presence);
 }
 
 function rateLimit(req, res, next) {
@@ -166,6 +201,37 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/api/sessions/:sessionId/stream", async (req, res) => {
+  const sessionId = req.params.sessionId;
+  const role = req.query.role;
+  const stream = getSessionStream(sessionId);
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  stream.clients.add(res);
+
+  try {
+    const session = await getSession(sessionId);
+    res.write(`event: snapshot\ndata: ${JSON.stringify({ messages: session.messages || [] })}\n\n`);
+  } catch {
+    res.write(`event: snapshot\ndata: ${JSON.stringify({ messages: [] })}\n\n`);
+  }
+
+  updatePresence(sessionId, role, true);
+
+  req.on("close", () => {
+    stream.clients.delete(res);
+    updatePresence(sessionId, role, false);
+
+    if (stream.clients.size === 0) {
+      sessionStreams.delete(sessionId);
+    }
+  });
+});
+
 app.post("/api/sessions/start", async (req, res) => {
   try {
     const { contactName, companyName, sourceLang, targetLang } = req.body;
@@ -227,6 +293,14 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
     });
 
     logLine([logPrefix, "=>", "SUCCESS"]);
+    broadcast(sessionId, "message", {
+      id: message.id,
+      sessionId,
+      speakerRole,
+      originalText,
+      translatedText,
+      timestamp,
+    });
     res.json({
       id: message.id,
       originalText,
@@ -265,6 +339,7 @@ app.get("/api/sessions/:sessionId", async (req, res) => {
 app.post("/api/sessions/:sessionId/end", async (req, res) => {
   try {
     const result = await endSession(req.params.sessionId);
+    broadcast(req.params.sessionId, "sessionEnded", result);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: "세션 종료에 실패했습니다." });

@@ -83,11 +83,12 @@ export default function HistoryDetailScreen({ sessionId, uiLang, onBack }) {
             {session.messages?.map((message) => (
               <SubtitleCard
                 key={message.id}
-                speaker={message.speakerRole}
+                speaker={message.speakerRole === "guest" ? "other" : "me"}
                 timestamp={message.timestamp}
                 originalText={message.originalText}
                 translatedText={message.translatedText}
                 readOnly
+                speakerLabel={message.speakerRole === "guest" ? "Guest" : "Host"}
               />
             ))}
           </div>

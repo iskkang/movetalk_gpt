@@ -29,6 +29,10 @@ export function startSession(contactName, companyName, sourceLang, targetLang) {
   });
 }
 
+export function joinSession(sessionId) {
+  return request(`/api/sessions/${sessionId}`);
+}
+
 export async function transcribeAndTranslate(
   audioBlob,
   sourceLang,
@@ -75,4 +79,13 @@ export function endSession(sessionId) {
   return request(`/api/sessions/${sessionId}/end`, {
     method: "POST",
   });
+}
+
+export function createSessionStream(sessionId, role) {
+  const params = new URLSearchParams();
+  if (role) {
+    params.set("role", role);
+  }
+
+  return new EventSource(`${BASE_URL}/api/sessions/${sessionId}/stream?${params.toString()}`);
 }
