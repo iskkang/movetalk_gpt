@@ -344,6 +344,8 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
     logLine([logPrefix, "=>", "FAILED"]);
     const reason =
       error?.response?.data?.error?.message || error?.code || error?.message || "Unknown error";
+    const apiStatus = error?.response?.status;
+    const apiCode = error?.response?.data?.error?.code;
     logLine([`sessionId=${sessionId}`, `elapsedMs=${Date.now() - startedAt}`, `reason=${reason}`]);
     if (error?.stack) {
       console.error(error.stack);
@@ -351,6 +353,31 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
     if (error?.response?.data) {
       console.error(JSON.stringify(error.response.data));
     }
+
+    if (apiStatus === 429 && apiCode === "insufficient_quota") {
+      res.status(402).json({
+        error:
+          "OpenAI API 사용 한도가 초과되었습니다. OpenAI Billing에서 결제 수단/크레딧을 설정한 뒤 다시 시도해주세요.",
+      });
+      return;
+    }
+
+    if (apiStatus === 401) {
+      res.status(401).json({
+        error:
+          "OPENAI_API_KEY 인증에 실패했습니다. Render 환경변수의 OPENAI_API_KEY를 확인해주세요.",
+      });
+      return;
+    }
+
+    if (apiStatus === 429) {
+      res.status(429).json({
+        error:
+          "OpenAI API 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.",
+      });
+      return;
+    }
+
     res.status(500).json({
       error: "처리 중 오류가 발생했습니다. 다시 시도해주세요.",
     });
