@@ -274,6 +274,7 @@ app.post("/api/transcribe-and-translate", (req, res, next) => {
 app.post("/api/transcribe-and-translate", async (req, res) => {
   const { sourceLang, targetLang, speakerRole, sessionId } = req.body;
   const logPrefix = `sourceLang=${sourceLang} speakerRole=${speakerRole}`;
+  const startedAt = Date.now();
 
   try {
     if (!req.file || !sessionId || !speakerRole) {
@@ -293,6 +294,7 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
     });
 
     logLine([logPrefix, "=>", "SUCCESS"]);
+    logLine([`sessionId=${sessionId}`, `elapsedMs=${Date.now() - startedAt}`]);
     broadcast(sessionId, "message", {
       id: message.id,
       sessionId,
@@ -312,6 +314,7 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
     });
   } catch (error) {
     logLine([logPrefix, "=>", "FAILED"]);
+    logLine([`sessionId=${sessionId}`, `elapsedMs=${Date.now() - startedAt}`, `reason=${error.message}`]);
     res.status(500).json({
       error: "처리 중 오류가 발생했습니다. 다시 시도해주세요.",
     });

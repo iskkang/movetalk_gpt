@@ -41,7 +41,7 @@ export async function transcribeAndTranslate(
   sessionId,
 ) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+  const timeoutId = window.setTimeout(() => controller.abort(), 60000);
   const formData = new FormData();
 
   formData.append("audio", audioBlob);
@@ -58,7 +58,7 @@ export async function transcribeAndTranslate(
     });
   } catch (error) {
     if (error.name === "AbortError") {
-      throw new Error("응답 시간이 초과되었습니다. 다시 시도해주세요.");
+      throw new Error("서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.");
     }
 
     throw error;
