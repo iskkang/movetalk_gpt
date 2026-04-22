@@ -73,6 +73,7 @@ export default function SessionScreen({
   const [summary, setSummary] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [presence, setPresence] = useState({ host: false, guest: false });
+  const [isSessionPreparing, setIsSessionPreparing] = useState(true);
   const conversationRef = useRef(null);
   const isEndingPressRef = useRef(false);
   const text = getCopy(uiLang);
@@ -96,6 +97,14 @@ export default function SessionScreen({
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setIsSessionPreparing(false);
+    }, 30000);
+
+    return () => window.clearTimeout(timer);
+  }, [sessionId]);
 
   useEffect(() => {
     let active = true;
@@ -225,6 +234,12 @@ export default function SessionScreen({
         ];
       });
     } catch (error) {
+      const isQuotaMessage = (error.message || "").includes("OpenAI API 사용 한도가 초과");
+      if (isQuotaMessage) {
+        showToast(error.message, "warning");
+        return;
+      }
+
       const failure = buildFailedCard(
         error.message || text.processError,
         speakerRole,
@@ -249,6 +264,11 @@ export default function SessionScreen({
   const handlePressStart = async (speakerRole) => {
     if (isOffline) {
       showToast(text.internetCheck, "warning");
+      return;
+    }
+
+    if (isSessionPreparing) {
+      showToast(text.sessionPreparing, "warning");
       return;
     }
 
@@ -364,7 +384,11 @@ export default function SessionScreen({
   };
 
   const canRecord =
-    !isOffline && !isProcessing && !isSessionEnded && !recorderState.instance;
+    !isOffline &&
+    !isProcessing &&
+    !isSessionEnded &&
+    !isSessionPreparing &&
+    !recorderState.instance;
 
   const liveStatus = presence[counterpartRole] ? text.participantConnected : text.participantWaiting;
 
@@ -374,6 +398,9 @@ export default function SessionScreen({
 
       {isOffline && (
         <div style={offlineBannerStyle}>{text.internetCheck}</div>
+      )}
+      {!isOffline && isSessionPreparing && (
+        <div style={preparingBannerStyle}>{text.sessionPreparing}</div>
       )}
 
       <header style={headerStyle}>
@@ -388,6 +415,11 @@ export default function SessionScreen({
             <div style={{ color: "#64748b", fontSize: 13, marginTop: 6 }}>
               {isHost ? text.roleHost : text.roleGuest} · {liveStatus}
             </div>
+            {isSessionPreparing ? (
+              <div style={{ color: "#92400e", fontSize: 12, marginTop: 4 }}>
+                {text.preparingBadge}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -514,6 +546,14 @@ const screenStyle = {
 const offlineBannerStyle = {
   background: "#fde047",
   color: "#1f2937",
+  borderRadius: 16,
+  padding: "12px 14px",
+  fontWeight: 700,
+};
+
+const preparingBannerStyle = {
+  background: "#fef3c7",
+  color: "#92400e",
   borderRadius: 16,
   padding: "12px 14px",
   fontWeight: 700,
