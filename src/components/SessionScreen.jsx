@@ -4,6 +4,7 @@ import Toast from "./Toast";
 import Modal from "./Modal";
 import { checkMicPermission, startRecording, stopRecording } from "../utils/audio";
 import { endSession, transcribeAndTranslate } from "../utils/api";
+import { getCopy } from "../utils/i18n";
 
 function languagePair(sourceLang, targetLang) {
   return `${sourceLang.toUpperCase()} → ${targetLang.toUpperCase()}`;
@@ -31,7 +32,7 @@ function buildFailedCard(errorMessage, speakerRole, audioBlob, sourceLang, targe
     id: `failed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     speakerRole,
     originalText: errorMessage,
-    translatedText: "처리되지 않았습니다. 다시 시도해주세요.",
+    translatedText: "",
     timestamp: new Date().toISOString(),
     failed: true,
     audioBlob,
@@ -47,6 +48,7 @@ export default function SessionScreen({
   targetLang,
   sessionId,
   sessionTitle,
+  uiLang,
   onViewHistory,
   onStartNewSession,
 }) {
@@ -65,6 +67,7 @@ export default function SessionScreen({
   const [summary, setSummary] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const conversationRef = useRef(null);
+  const text = getCopy(uiLang);
 
   const showToast = (message, type = "error") => {
     setToast({ message, type, visible: true });
@@ -131,19 +134,20 @@ export default function SessionScreen({
       });
     } catch (error) {
       const failure = buildFailedCard(
-        error.message || "처리 중 오류가 발생했습니다. 다시 시도해주세요.",
+        error.message || text.processError,
         speakerRole,
         audioBlob,
         currentSourceLang,
         currentTargetLang,
       );
+      failure.translatedText = text.failedCardText;
 
       setMessages((prev) => {
         const next = failedMessageId ? prev.filter((item) => item.id !== failedMessageId) : prev;
         return [...next, failure];
       });
 
-      showToast(error.message || "처리 중 오류가 발생했습니다. 다시 시도해주세요.");
+      showToast(error.message || text.processError);
     } finally {
       setIsProcessing(false);
       setActiveSpeaker(null);
@@ -152,7 +156,7 @@ export default function SessionScreen({
 
   const handlePressStart = async (speakerRole) => {
     if (isOffline) {
-      showToast("인터넷 연결을 확인해주세요.", "warning");
+      showToast(text.internetCheck, "warning");
       return;
     }
 
@@ -162,10 +166,7 @@ export default function SessionScreen({
 
     const hasPermission = await checkMicPermission();
     if (!hasPermission) {
-      showToast(
-        "마이크 접근이 거부되었습니다. 브라우저 설정에서 허용해주세요.",
-        "error",
-      );
+      showToast(text.micDenied, "error");
       return;
     }
 
@@ -178,7 +179,7 @@ export default function SessionScreen({
       });
       setActiveSpeaker(speakerRole);
     } catch (error) {
-      showToast(error.message || "녹음을 시작할 수 없습니다.");
+      showToast(error.message || text.startRecordingError);
     }
   };
 
@@ -198,7 +199,7 @@ export default function SessionScreen({
         // Ignore recorder shutdown errors when rejecting short audio.
       }
       setActiveSpeaker(null);
-      showToast("너무 짧습니다. 길게 누르세요.");
+      showToast(text.shortRecording);
       return;
     }
 
@@ -217,7 +218,7 @@ export default function SessionScreen({
       });
     } catch (error) {
       setActiveSpeaker(null);
-      showToast(error.message || "녹음 처리에 실패했습니다.");
+      showToast(error.message || text.recordingError);
     }
   };
 
@@ -246,7 +247,7 @@ export default function SessionScreen({
       setIsSessionEnded(true);
       setShowSummaryModal(true);
     } catch (error) {
-      showToast(error.message || "세션 종료에 실패했습니다.");
+      showToast(error.message || text.startSessionError);
     }
   };
 
@@ -254,7 +255,7 @@ export default function SessionScreen({
     const lines = messages
       .filter((message) => !message.failed)
       .map((message) => {
-        const speakerLabel = message.speakerRole === "me" ? "나" : "상대방";
+        const speakerLabel = message.speakerRole === "me" ? text.me : text.other;
         const time = new Date(message.timestamp).toLocaleTimeString("ko-KR", {
           hour: "2-digit",
           minute: "2-digit",
@@ -264,7 +265,7 @@ export default function SessionScreen({
       });
 
     await navigator.clipboard.writeText(lines.join("\n"));
-    showToast("복사되었습니다.", "success");
+    showToast(text.copied, "success");
   };
 
   const canRecord =
@@ -275,7 +276,7 @@ export default function SessionScreen({
       <Toast {...toast} onHide={() => setToast((prev) => ({ ...prev, visible: false }))} />
 
       {isOffline && (
-        <div style={offlineBannerStyle}>인터넷 연결을 확인해주세요.</div>
+        <div style={offlineBannerStyle}>{text.internetCheck}</div>
       )}
 
       <header style={headerStyle}>
@@ -291,27 +292,27 @@ export default function SessionScreen({
         </div>
 
         <button style={endButtonStyle} onClick={handleEndSession} disabled={isProcessing}>
-          세션 종료
+          {text.sessionEnd}
         </button>
       </header>
 
       <div style={conversationHeaderStyle}>
         <div>
           <strong>{contactName}</strong>
-          <div style={{ color: "#64748b", fontSize: 13 }}>실시간 자막 기록</div>
+          <div style={{ color: "#64748b", fontSize: 13 }}>{text.liveTranscript}</div>
         </div>
         <button
           style={clearButtonStyle}
           onClick={() => setMessages([])}
           disabled={messages.length === 0}
         >
-          자막 지우기
+          {text.clearSubtitles}
         </button>
       </div>
 
       <div ref={conversationRef} style={conversationStyle}>
         {messages.length === 0 ? (
-          <div style={emptyStateStyle}>아직 기록된 자막이 없습니다.</div>
+          <div style={emptyStateStyle}>{text.emptySubtitles}</div>
         ) : (
           messages.map((message) => (
             <SubtitleCard
@@ -322,6 +323,7 @@ export default function SessionScreen({
               translatedText={message.translatedText}
               failed={message.failed}
               readOnly={isSessionEnded}
+              labels={text}
               onRetry={() => handleRetry(message)}
             />
           ))
@@ -345,7 +347,7 @@ export default function SessionScreen({
           onTouchStart={() => handlePressStart("me")}
           onTouchEnd={handlePressEnd}
         >
-          {isProcessing && activeSpeaker === "me" ? makeSpinner() : "나 말하기"}
+          {isProcessing && activeSpeaker === "me" ? makeSpinner() : text.meTalk}
         </button>
 
         <button
@@ -366,18 +368,20 @@ export default function SessionScreen({
           onTouchStart={() => handlePressStart("other")}
           onTouchEnd={handlePressEnd}
         >
-          {isProcessing && activeSpeaker === "other" ? makeSpinner() : "상대방 말하기"}
+          {isProcessing && activeSpeaker === "other" ? makeSpinner() : text.otherTalk}
         </button>
       </div>
 
       {showSummaryModal && (
-        <Modal title="세션 요약" onClose={() => setShowSummaryModal(false)}>
+        <Modal title={text.sessionSummary} onClose={() => setShowSummaryModal(false)}>
           <div style={{ display: "grid", gap: 10 }}>
             <strong>{sessionTitle}</strong>
-            <span>메시지 수: {summary?.totalMessages ?? messages.filter((item) => !item.failed).length}</span>
-            <span>대화 시간: {summary?.duration || "진행 중"}</span>
+            <span>
+              {text.messageCount}: {summary?.totalMessages ?? messages.filter((item) => !item.failed).length}
+            </span>
+            <span>{text.duration}: {summary?.duration || text.inProgress}</span>
             <button style={modalButtonStyle("#0f172a")} onClick={handleCopyConversation}>
-              대화 내용 복사
+              {text.copyConversation}
             </button>
             <button
               style={modalButtonStyle("#2563eb")}
@@ -386,10 +390,10 @@ export default function SessionScreen({
                 onViewHistory();
               }}
             >
-              대화 기록 보기
+              {text.viewHistory}
             </button>
             <button style={modalButtonStyle("#16a34a")} onClick={onStartNewSession}>
-              새 세션 시작
+              {text.startNewSession}
             </button>
           </div>
         </Modal>

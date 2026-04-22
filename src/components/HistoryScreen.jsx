@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getSessions } from "../utils/api";
+import { getCopy } from "../utils/i18n";
 
 function formatDateTime(timestamp) {
   return new Date(timestamp).toLocaleString("ko-KR", {
@@ -16,10 +17,11 @@ function toBadge(sourceLang, targetLang) {
   return `${sourceLang?.toUpperCase() || "--"}→${targetLang?.toUpperCase() || "--"}`;
 }
 
-export default function HistoryScreen({ onBack, onOpenDetail }) {
+export default function HistoryScreen({ uiLang, onBack, onOpenDetail }) {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const text = getCopy(uiLang);
 
   const loadSessions = async () => {
     setIsLoading(true);
@@ -29,7 +31,7 @@ export default function HistoryScreen({ onBack, onOpenDetail }) {
       const response = await getSessions();
       setSessions(response);
     } catch (loadError) {
-      setError(loadError.message || "기록을 불러오지 못했습니다. 다시 시도해주세요.");
+      setError(loadError.message || text.historyLoadError);
     } finally {
       setIsLoading(false);
     }
@@ -37,7 +39,7 @@ export default function HistoryScreen({ onBack, onOpenDetail }) {
 
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [uiLang]);
 
   return (
     <section style={screenStyle}>
@@ -45,23 +47,23 @@ export default function HistoryScreen({ onBack, onOpenDetail }) {
         <button style={navButtonStyle} onClick={onBack}>
           ←
         </button>
-        <h1 style={{ margin: 0, fontSize: "1.4rem" }}>대화 기록</h1>
+        <h1 style={{ margin: 0, fontSize: "1.4rem" }}>{text.historyTitle}</h1>
         <div style={{ width: 40 }} />
       </header>
 
-      {isLoading && <div style={stateCardStyle}>불러오는 중...</div>}
+      {isLoading && <div style={stateCardStyle}>{text.loading}</div>}
 
       {!isLoading && error && (
         <div style={stateCardStyle}>
           <p style={{ marginTop: 0 }}>{error}</p>
           <button style={retryButtonStyle} onClick={loadSessions}>
-            재시도
+            {text.retry}
           </button>
         </div>
       )}
 
       {!isLoading && !error && sessions.length === 0 && (
-        <div style={stateCardStyle}>저장된 대화 기록이 없습니다.</div>
+        <div style={stateCardStyle}>{text.historyEmpty}</div>
       )}
 
       {!isLoading && !error && sessions.length > 0 && (
@@ -83,8 +85,10 @@ export default function HistoryScreen({ onBack, onOpenDetail }) {
                 </span>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <span style={badgeStyle}>{toBadge(session.sourceLang, session.targetLang)}</span>
-                  <span style={metaStyle}>메시지 {session.totalMessages ?? 0}</span>
-                  <span style={metaStyle}>{session.duration || "진행 중"}</span>
+                  <span style={metaStyle}>
+                    {text.messageCountCompact} {session.totalMessages ?? 0}
+                  </span>
+                  <span style={metaStyle}>{session.duration || text.inProgress}</span>
                 </div>
               </div>
             </button>

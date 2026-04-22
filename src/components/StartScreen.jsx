@@ -1,19 +1,17 @@
 import { useState } from "react";
 import Toast from "./Toast";
 import { startSession } from "../utils/api";
+import { getCopy, getLanguageOptions } from "../utils/i18n";
 
-const languages = [
-  { value: "ko", label: "한국어" },
-  { value: "ru", label: "러시아어" },
-];
-
-export default function StartScreen({ onStart, onOpenHistory }) {
+export default function StartScreen({ uiLang, onLanguageChange, onStart, onOpenHistory }) {
   const [contactName, setContactName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [sourceLang, setSourceLang] = useState("ko");
   const [targetLang, setTargetLang] = useState("ru");
   const [toast, setToast] = useState({ message: "", type: "error", visible: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const text = getCopy(uiLang);
+  const languages = getLanguageOptions(uiLang);
 
   const showToast = (message, type = "error") => {
     setToast({ message, type, visible: true });
@@ -21,7 +19,7 @@ export default function StartScreen({ onStart, onOpenHistory }) {
 
   const handleStart = async () => {
     if (!contactName.trim()) {
-      showToast("상대방 이름을 입력해주세요.");
+      showToast(text.contactRequired);
       return;
     }
 
@@ -43,9 +41,10 @@ export default function StartScreen({ onStart, onOpenHistory }) {
         companyName: companyName.trim(),
         sourceLang,
         targetLang,
+        uiLang,
       });
     } catch (error) {
-      showToast(error.message || "세션을 시작할 수 없습니다. 다시 시도해주세요.");
+      showToast(error.message || text.startSessionError);
     } finally {
       setIsSubmitting(false);
     }
@@ -55,40 +54,42 @@ export default function StartScreen({ onStart, onOpenHistory }) {
     <section style={screenStyle}>
       <Toast {...toast} onHide={() => setToast((prev) => ({ ...prev, visible: false }))} />
       <div>
-        <p style={eyebrowStyle}>Live Subtitle Interpreter</p>
-        <h1 style={titleStyle}>물류 통역을 끊기지 않게 이어주는 실전형 MVP</h1>
-        <p style={descriptionStyle}>
-          거래처명 중심으로 세션을 시작하고, 자막형 대화를 저장하는 구조입니다.
-        </p>
+        <p style={eyebrowStyle}>{text.appName}</p>
+        <h1 style={titleStyle}>{text.startTitle}</h1>
+        <p style={descriptionStyle}>{text.startDescription}</p>
       </div>
 
       <div style={cardStyle}>
         <label style={labelStyle}>
-          Contact Name
+          {text.contactName}
           <input
             style={inputStyle}
             value={contactName}
             onChange={(event) => setContactName(event.target.value)}
-            placeholder="상대방 이름"
+            placeholder={text.contactPlaceholder}
           />
         </label>
 
         <label style={labelStyle}>
-          Company Name
+          {text.companyName}
           <input
             style={inputStyle}
             value={companyName}
             onChange={(event) => setCompanyName(event.target.value)}
-            placeholder="회사명 (선택)"
+            placeholder={text.companyPlaceholder}
           />
         </label>
 
         <label style={labelStyle}>
-          My Language
+          {text.myLanguage}
           <select
             style={inputStyle}
             value={sourceLang}
-            onChange={(event) => setSourceLang(event.target.value)}
+            onChange={(event) => {
+              const nextLang = event.target.value;
+              setSourceLang(nextLang);
+              onLanguageChange(nextLang);
+            }}
           >
             {languages.map((language) => (
               <option key={language.value} value={language.value}>
@@ -99,7 +100,7 @@ export default function StartScreen({ onStart, onOpenHistory }) {
         </label>
 
         <label style={labelStyle}>
-          Their Language
+          {text.theirLanguage}
           <select
             style={inputStyle}
             value={targetLang}
@@ -118,10 +119,10 @@ export default function StartScreen({ onStart, onOpenHistory }) {
           onClick={handleStart}
           disabled={isSubmitting}
         >
-          {isSubmitting ? "시작 중..." : "Start Session"}
+          {isSubmitting ? text.starting : text.startSession}
         </button>
         <button style={secondaryButtonStyle} onClick={onOpenHistory} disabled={isSubmitting}>
-          대화 기록
+          {text.history}
         </button>
       </div>
     </section>

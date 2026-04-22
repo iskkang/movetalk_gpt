@@ -18,12 +18,14 @@ const initialSessionInfo = {
   companyName: "",
   sourceLang: "ko",
   targetLang: "ru",
+  uiLang: "ko",
 };
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState("start");
   const [sessionInfo, setSessionInfo] = useState(initialSessionInfo);
   const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [appLanguage, setAppLanguage] = useState("ko");
 
   const goToStart = () => {
     setSessionInfo(initialSessionInfo);
@@ -36,7 +38,10 @@ export default function App() {
       <div style={phoneFrameStyle}>
         {currentScreen === "start" && (
           <StartScreen
+            uiLang={appLanguage}
+            onLanguageChange={setAppLanguage}
             onStart={(nextSessionInfo) => {
+              setAppLanguage(nextSessionInfo.uiLang);
               setSessionInfo(nextSessionInfo);
               setCurrentScreen("session");
             }}
@@ -47,6 +52,7 @@ export default function App() {
         {currentScreen === "session" && (
           <SessionScreen
             {...sessionInfo}
+            uiLang={appLanguage}
             onViewHistory={() => setCurrentScreen("history")}
             onStartNewSession={goToStart}
           />
@@ -54,6 +60,7 @@ export default function App() {
 
         {currentScreen === "history" && (
           <HistoryScreen
+            uiLang={appLanguage}
             onBack={goToStart}
             onOpenDetail={(sessionId) => {
               setSelectedSessionId(sessionId);
@@ -65,6 +72,7 @@ export default function App() {
         {currentScreen === "historyDetail" && (
           <HistoryDetailScreen
             sessionId={selectedSessionId}
+            uiLang={appLanguage}
             onBack={() => setCurrentScreen("history")}
           />
         )}

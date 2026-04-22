@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import SubtitleCard from "./SubtitleCard";
 import { getSessionDetail } from "../utils/api";
+import { getCopy } from "../utils/i18n";
 
 function formatDateTime(timestamp) {
   return new Date(timestamp).toLocaleString("ko-KR", {
@@ -13,10 +14,11 @@ function formatDateTime(timestamp) {
   });
 }
 
-export default function HistoryDetailScreen({ sessionId, onBack }) {
+export default function HistoryDetailScreen({ sessionId, uiLang, onBack }) {
   const [session, setSession] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const text = getCopy(uiLang);
 
   useEffect(() => {
     let isMounted = true;
@@ -32,7 +34,7 @@ export default function HistoryDetailScreen({ sessionId, onBack }) {
         }
       } catch (loadError) {
         if (isMounted) {
-          setError(loadError.message || "상세 기록을 불러오지 못했습니다.");
+          setError(loadError.message || text.detailLoadError);
         }
       } finally {
         if (isMounted) {
@@ -46,7 +48,7 @@ export default function HistoryDetailScreen({ sessionId, onBack }) {
     return () => {
       isMounted = false;
     };
-  }, [sessionId]);
+  }, [sessionId, uiLang]);
 
   return (
     <section style={screenStyle}>
@@ -54,25 +56,27 @@ export default function HistoryDetailScreen({ sessionId, onBack }) {
         <button style={navButtonStyle} onClick={onBack}>
           ←
         </button>
-        <h1 style={{ margin: 0, fontSize: "1.15rem" }}>상세 기록</h1>
+        <h1 style={{ margin: 0, fontSize: "1.15rem" }}>{text.detailTitle}</h1>
         <div style={{ width: 40 }} />
       </header>
 
-      {isLoading && <div style={infoCardStyle}>불러오는 중...</div>}
+      {isLoading && <div style={infoCardStyle}>{text.loading}</div>}
       {!isLoading && error && <div style={infoCardStyle}>{error}</div>}
 
       {!isLoading && !error && session && (
         <>
           <div style={infoCardStyle}>
             <h2 style={{ marginTop: 0 }}>{session.sessionTitle}</h2>
-            <p style={metaTextStyle}>연락처: {session.contactName}</p>
-            {session.companyName ? <p style={metaTextStyle}>회사: {session.companyName}</p> : null}
-            <p style={metaTextStyle}>일시: {formatDateTime(session.createdAt)}</p>
+            <p style={metaTextStyle}>{text.contactLabel}: {session.contactName}</p>
+            {session.companyName ? <p style={metaTextStyle}>{text.companyLabel}: {session.companyName}</p> : null}
+            <p style={metaTextStyle}>{text.dateLabel}: {formatDateTime(session.createdAt)}</p>
             <p style={metaTextStyle}>
-              언어: {session.sourceLang?.toUpperCase()}→{session.targetLang?.toUpperCase()}
+              {text.languageLabel}: {session.sourceLang?.toUpperCase()}→{session.targetLang?.toUpperCase()}
             </p>
-            <p style={metaTextStyle}>메시지 수: {session.totalMessages ?? 0}</p>
-            <p style={{ ...metaTextStyle, marginBottom: 0 }}>대화 시간: {session.duration || "진행 중"}</p>
+            <p style={metaTextStyle}>{text.totalMessagesLabel}: {session.totalMessages ?? 0}</p>
+            <p style={{ ...metaTextStyle, marginBottom: 0 }}>
+              {text.durationLabel}: {session.duration || text.inProgress}
+            </p>
           </div>
 
           <div style={messagesStyle}>

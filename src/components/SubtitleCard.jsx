@@ -18,9 +18,10 @@ export default function SubtitleCard({
   failed = false,
   onRetry,
   readOnly = false,
+  labels,
 }) {
   const isMe = speaker === "me";
-  const label = isMe ? "나" : "상대방";
+  const label = isMe ? labels?.me || "나" : labels?.other || "상대방";
 
   return (
     <div
@@ -60,7 +61,7 @@ export default function SubtitleCard({
             fontWeight: 700,
           }}
         >
-          전송 실패
+          {labels?.failedLabel || "전송 실패"}
         </div>
       )}
       <div style={{ color: "#64748b", fontSize: 14, marginBottom: 10 }}>{originalText}</div>
@@ -81,7 +82,7 @@ export default function SubtitleCard({
           }}
           onClick={onRetry}
         >
-          재시도
+          {labels?.retry || "재시도"}
         </button>
       )}
     </div>
