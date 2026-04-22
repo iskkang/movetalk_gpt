@@ -14,6 +14,7 @@ const express = require("express");
 const multer = require("multer");
 const OpenAI = require("openai");
 const { toFile } = require("openai");
+const { Agent } = require("undici");
 const {
   addMessage,
   createSession,
@@ -33,6 +34,11 @@ const upload = multer({
 
 const requestBuckets = new Map();
 const sessionStreams = new Map();
+const ipv4Dispatcher = new Agent({
+  connect: {
+    family: 4,
+  },
+});
 
 function normalizeOrigin(value) {
   return (value || "").trim().replace(/\/$/, "");
@@ -164,7 +170,14 @@ function getOpenAI() {
     throw new Error("OpenAI API key is missing.");
   }
 
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 60_000,
+    maxRetries: 1,
+    fetchOptions: {
+      dispatcher: ipv4Dispatcher,
+    },
+  });
 }
 
 async function transcribeAudio(buffer, fileName, sourceLang) {
