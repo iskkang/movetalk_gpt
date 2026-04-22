@@ -74,6 +74,7 @@ export default function SessionScreen({
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [presence, setPresence] = useState({ host: false, guest: false });
   const conversationRef = useRef(null);
+  const isEndingPressRef = useRef(false);
   const text = getCopy(uiLang);
   const isHost = participantRole === "host";
   const counterpartRole = isHost ? "guest" : "host";
@@ -267,9 +268,10 @@ export default function SessionScreen({
   };
 
   const handlePressEnd = async () => {
-    if (!recorderState.instance) {
+    if (!recorderState.instance || isEndingPressRef.current) {
       return;
     }
+    isEndingPressRef.current = true;
 
     const elapsed = Date.now() - recorderState.startedAt;
     const { instance, speakerRole } = recorderState;
@@ -283,6 +285,7 @@ export default function SessionScreen({
       }
       setActiveSpeaker(null);
       showToast(text.shortRecording);
+      isEndingPressRef.current = false;
       return;
     }
 
@@ -301,6 +304,8 @@ export default function SessionScreen({
     } catch (error) {
       setActiveSpeaker(null);
       showToast(error.message || text.recordingError);
+    } finally {
+      isEndingPressRef.current = false;
     }
   };
 
@@ -439,15 +444,22 @@ export default function SessionScreen({
             !canRecord &&
             !(recorderState.instance && recorderState.speakerRole === participantRole)
           }
-          onMouseDown={() => handlePressStart(participantRole)}
-          onMouseUp={handlePressEnd}
-          onMouseLeave={() => {
-            if (recorderState.speakerRole === participantRole) {
+          onPointerDown={(event) => {
+            if (event.pointerType === "mouse" && event.button !== 0) {
+              return;
+            }
+            handlePressStart(participantRole);
+          }}
+          onPointerUp={handlePressEnd}
+          onPointerCancel={handlePressEnd}
+          onPointerLeave={(event) => {
+            if (
+              event.pointerType === "mouse" &&
+              recorderState.speakerRole === participantRole
+            ) {
               handlePressEnd();
             }
           }}
-          onTouchStart={() => handlePressStart(participantRole)}
-          onTouchEnd={handlePressEnd}
         >
           {isProcessing && activeSpeaker === participantRole ? makeSpinner() : text.speakNow}
         </button>
@@ -610,6 +622,8 @@ const speakerButtonStyle = (background) => ({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  touchAction: "none",
+  userSelect: "none",
 });
 
 const recordingStyle = {
