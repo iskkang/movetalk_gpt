@@ -14,6 +14,7 @@ export const copy = {
     appName: "MoveTalk Interpreter",
     startTitle: "실시간 비즈니스 통역",
     startDescription: "거래처와의 대화를 빠르게 통역하고 기록합니다.",
+    languageMenu: "Language",
     contactName: "상대방 이름",
     contactPlaceholder: "상대방 이름",
     companyName: "회사명",
@@ -68,6 +69,7 @@ export const copy = {
     appName: "MoveTalk Interpreter",
     startTitle: "Синхронный бизнес-перевод",
     startDescription: "Быстрый перевод и сохранение разговоров с партнерами.",
+    languageMenu: "Language",
     contactName: "Имя собеседника",
     contactPlaceholder: "Имя собеседника",
     companyName: "Компания",
@@ -131,4 +133,3 @@ export function getLanguageOptions(uiLang) {
     { value: "ru", label: names.ru },
   ];
 }
-

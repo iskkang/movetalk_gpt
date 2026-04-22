@@ -60,6 +60,28 @@ export default function StartScreen({ uiLang, onLanguageChange, onStart, onOpenH
       </div>
 
       <div style={cardStyle}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <span style={labelStyle}>{text.languageMenu}</span>
+          <div style={languageToggleWrapStyle}>
+            <button
+              type="button"
+              style={languageToggleButtonStyle(uiLang === "ko")}
+              onClick={() => onLanguageChange("ko")}
+            >
+              <span style={flagStyle}>🇰🇷</span>
+              <span>Korean</span>
+            </button>
+            <button
+              type="button"
+              style={languageToggleButtonStyle(uiLang === "ru")}
+              onClick={() => onLanguageChange("ru")}
+            >
+              <span style={flagStyle}>🇷🇺</span>
+              <span>Russian</span>
+            </button>
+          </div>
+        </div>
+
         <label style={labelStyle}>
           {text.contactName}
           <input
@@ -85,11 +107,7 @@ export default function StartScreen({ uiLang, onLanguageChange, onStart, onOpenH
           <select
             style={inputStyle}
             value={sourceLang}
-            onChange={(event) => {
-              const nextLang = event.target.value;
-              setSourceLang(nextLang);
-              onLanguageChange(nextLang);
-            }}
+            onChange={(event) => setSourceLang(event.target.value)}
           >
             {languages.map((language) => (
               <option key={language.value} value={language.value}>
@@ -171,6 +189,31 @@ const labelStyle = {
   display: "grid",
   gap: 8,
   fontWeight: 700,
+};
+
+const languageToggleWrapStyle = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+};
+
+const languageToggleButtonStyle = (active) => ({
+  borderRadius: 16,
+  border: active ? "1px solid #16a34a" : "1px solid #cbd5e1",
+  padding: "14px 16px",
+  background: active ? "#ecfdf5" : "#fff",
+  color: "#0f172a",
+  fontWeight: 800,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  boxShadow: active ? "inset 0 0 0 1px rgba(22, 163, 74, 0.12)" : "none",
+});
+
+const flagStyle = {
+  fontSize: 18,
+  lineHeight: 1,
 };
 
 const inputStyle = {
