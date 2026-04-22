@@ -13,6 +13,7 @@ const cors = require("cors");
 const express = require("express");
 const multer = require("multer");
 const OpenAI = require("openai");
+const { toFile } = require("openai");
 const {
   addMessage,
   createSession,
@@ -167,10 +168,9 @@ function getOpenAI() {
 }
 
 async function transcribeAudio(buffer, fileName, sourceLang) {
+  const uploadFile = await toFile(buffer, fileName || "audio.webm");
   const response = await getOpenAI().audio.transcriptions.create({
-    file: new File([buffer], fileName || "audio.webm", {
-      type: "audio/webm",
-    }),
+    file: uploadFile,
     model: "whisper-1",
     language: languageCode(sourceLang),
   });
@@ -315,6 +315,9 @@ app.post("/api/transcribe-and-translate", async (req, res) => {
   } catch (error) {
     logLine([logPrefix, "=>", "FAILED"]);
     logLine([`sessionId=${sessionId}`, `elapsedMs=${Date.now() - startedAt}`, `reason=${error.message}`]);
+    if (error?.stack) {
+      console.error(error.stack);
+    }
     res.status(500).json({
       error: "처리 중 오류가 발생했습니다. 다시 시도해주세요.",
     });
