@@ -56,8 +56,15 @@ npm run dev
   - `OPENAI_API_KEY`
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_KEY`
+  - `FRONTEND_URL`
 - root `.env`
   - `VITE_API_URL=http://localhost:3001`
+
+## CORS note
+
+- `FRONTEND_URL` can be a single URL or multiple comma-separated URLs
+- Example:
+  - `FRONTEND_URL=https://your-app.vercel.app,https://your-app-git-main-your-team.vercel.app`
 
 ## GitHub upload checklist
 

@@ -30,8 +30,45 @@ const upload = multer({
   },
 });
 
-const allowedOrigins = ["http://localhost:5173", process.env.FRONTEND_URL].filter(Boolean);
 const requestBuckets = new Map();
+
+function normalizeOrigin(value) {
+  return (value || "").trim().replace(/\/$/, "");
+}
+
+function getConfiguredOrigins() {
+  return (process.env.FRONTEND_URL || "")
+    .split(",")
+    .map(normalizeOrigin)
+    .filter(Boolean);
+}
+
+function isAllowedOrigin(origin) {
+  const normalizedOrigin = normalizeOrigin(origin);
+  const configuredOrigins = getConfiguredOrigins();
+
+  if (!normalizedOrigin) {
+    return true;
+  }
+
+  if (
+    normalizedOrigin === "http://localhost:5173" ||
+    normalizedOrigin === "http://127.0.0.1:5173"
+  ) {
+    return true;
+  }
+
+  if (configuredOrigins.includes(normalizedOrigin)) {
+    return true;
+  }
+
+  try {
+    const { hostname } = new URL(normalizedOrigin);
+    return hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
 
 function logLine(parts) {
   console.log(`[${new Date().toISOString()}] ${parts.join(" ")}`);
@@ -59,13 +96,15 @@ function rateLimit(req, res, next) {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
         return;
       }
 
       callback(new Error("Not allowed by CORS"));
     },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 app.use(express.json());
